@@ -4,15 +4,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Calendar, Coffee } from 'lucide-react';
+import { Clock, Calendar, Coffee, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 
 interface CaffeineEntry {
+  id?: string;
   date: string;
   time: string;
   amount: number;
 }
 
 const CaffeineCalculator = () => {
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [entries, setEntries] = useState<CaffeineEntry[]>([]);
   const [newEntry, setNewEntry] = useState({
@@ -22,6 +28,7 @@ const CaffeineCalculator = () => {
   });
   const [timeMode, setTimeMode] = useState<'24h' | 'ampm'>('24h');
   const [remainingCaffeine, setRemainingCaffeine] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -30,6 +37,12 @@ const CaffeineCalculator = () => {
 
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadEntries();
+    }
+  }, [user]);
 
   useEffect(() => {
     calculateRemainingCaffeine();
@@ -62,15 +75,102 @@ const CaffeineCalculator = () => {
     setRemainingCaffeine(Math.max(0, total));
   };
 
-  const addEntry = () => {
-    if (newEntry.date && newEntry.time && newEntry.amount) {
-      setEntries([...entries, {
+  const loadEntries = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('caffeine_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('entry_date', { ascending: false })
+        .order('entry_time', { ascending: false });
+
+      if (error) {
+        toast({
+          title: "Error loading entries",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const formattedEntries = data.map(entry => ({
+        id: entry.id,
+        date: new Date(entry.entry_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' }),
+        time: entry.entry_time,
+        amount: parseFloat(entry.amount_mg.toString())
+      }));
+
+      setEntries(formattedEntries);
+    } catch (error) {
+      console.error('Error loading entries:', error);
+    }
+  };
+
+  const addEntry = async () => {
+    if (!newEntry.date || !newEntry.time || !newEntry.amount || !user) return;
+
+    setLoading(true);
+    try {
+      // Parse the date input (MM/DD) and create a proper date
+      const [month, day] = newEntry.date.split('/');
+      const currentYear = new Date().getFullYear();
+      const entryDate = new Date(currentYear, parseInt(month) - 1, parseInt(day));
+      
+      const { data, error } = await supabase
+        .from('caffeine_entries')
+        .insert({
+          user_id: user.id,
+          entry_date: entryDate.toISOString().split('T')[0],
+          entry_time: newEntry.time,
+          amount_mg: parseFloat(newEntry.amount)
+        })
+        .select()
+        .single();
+
+      if (error) {
+        toast({
+          title: "Error adding entry",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Add to local state
+      const newEntryData = {
+        id: data.id,
         date: newEntry.date,
         time: newEntry.time,
         amount: parseFloat(newEntry.amount)
-      }]);
+      };
+
+      setEntries([newEntryData, ...entries]);
       setNewEntry({ date: '', time: '', amount: '' });
+      
+      toast({
+        title: "Entry added",
+        description: "Caffeine entry saved successfully!"
+      });
+    } catch (error) {
+      console.error('Error adding entry:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save entry",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast({
+      title: "Signed out",
+      description: "You have been signed out successfully"
+    });
   };
 
   const formatCurrentTime = () => {
@@ -117,6 +217,26 @@ const CaffeineCalculator = () => {
   return (
     <div className="min-h-screen bg-sky-gradient flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
+        {/* Header with logout */}
+        <Card className="p-4 shadow-caffeine border-0 bg-card/80 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Coffee className="w-6 h-6 text-primary" />
+              <h1 className="text-lg font-semibold">Caffeine Tracker</h1>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSignOut}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+          {user?.email && (
+            <p className="text-xs text-muted-foreground mt-1">{user.email}</p>
+          )}
+        </Card>
         {/* Current Time Display */}
         <Card className="p-6 text-center shadow-caffeine border-0 bg-card/80 backdrop-blur-sm">
           <div className="space-y-2">
@@ -200,9 +320,9 @@ const CaffeineCalculator = () => {
             <Button 
               onClick={addEntry} 
               className="w-full shadow-soft transition-smooth"
-              disabled={!newEntry.date || !newEntry.time || !newEntry.amount}
+              disabled={!newEntry.date || !newEntry.time || !newEntry.amount || loading}
             >
-              Add Entry
+              {loading ? 'Adding...' : 'Add Entry'}
             </Button>
           </div>
         </Card>
