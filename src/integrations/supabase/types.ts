@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      caffeine_entries: {
+        Row: {
+          amount_mg: number
+          created_at: string
+          entry_date: string
+          entry_time: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_mg: number
+          created_at?: string
+          entry_date: string
+          entry_time: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_mg?: number
+          created_at?: string
+          entry_date?: string
+          entry_time?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
