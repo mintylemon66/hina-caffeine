@@ -18,6 +18,17 @@ export default {
 			}
 		},
 		extend: {
+			backgroundImage: {
+				'sky-gradient': 'var(--sky-gradient)',
+				'water-gradient': 'var(--water-gradient)',
+			},
+			boxShadow: {
+				'caffeine': 'var(--caffeine-glow)',
+				'soft': 'var(--soft-shadow)',
+			},
+			transitionTimingFunction: {
+				'smooth': 'var(--transition-smooth)',
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
